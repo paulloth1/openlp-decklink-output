@@ -74,6 +74,13 @@ MODE_SIZES = {
     '1080p50': (1920, 1080), '1080p5994': (1920, 1080), '1080p60': (1920, 1080),
 }
 
+#: OpenLP's HideMode values, mirrored so this module stays importable without
+#: OpenLP present. Verified against openlp/core/ui/__init__.py in 3.1.7;
+#: the plugin checks these against the real enum at runtime and warns on drift.
+HIDE_BLANK = 1
+HIDE_THEME = 2
+HIDE_DESKTOP = 3
+
 DEFAULT_SETTINGS = {
     'decklink/enabled': False,
     'decklink/device number': 0,
@@ -81,7 +88,7 @@ DEFAULT_SETTINGS = {
     'decklink/capture backend': BACKEND_AUTO,
     'decklink/sink': SINK_DECKLINK,
     'decklink/screen number': -1,
-    'decklink/blank on hide': True,
+    'decklink/black on show desktop': False,
     'decklink/portal restore token': '',
     'decklink/keyer mode': 'off',
 }
@@ -126,7 +133,7 @@ class OutputConfig:
     backend: str = BACKEND_AUTO
     sink: str = SINK_DECKLINK
     screen_number: int = -1
-    blank_on_hide: bool = True
+    black_on_show_desktop: bool = False
     keyer_mode: str = 'off'
     region: Region = None
     portal_restore_token: str = ''
@@ -169,7 +176,34 @@ class OutputConfig:
             backend=str(settings.value('decklink/capture backend')),
             sink=str(settings.value('decklink/sink')),
             screen_number=int(settings.value('decklink/screen number')),
-            blank_on_hide=bool(settings.value('decklink/blank on hide')),
+            black_on_show_desktop=bool(settings.value('decklink/black on show desktop')),
             keyer_mode=str(settings.value('decklink/keyer mode')),
             portal_restore_token=str(settings.value('decklink/portal restore token') or ''),
         )
+
+
+def should_blank(hide_mode, config):
+    """
+    Decide whether the SDI feed should be forced to black.
+
+    The answer is almost always no, because OpenLP already renders each hide
+    mode into its display window and a screen capture picks that up verbatim:
+
+    * ``Blank`` ("Black") runs ``toBlack``, so the window really is black.
+    * ``Theme`` runs ``toTheme``, so the theme background really is drawn.
+    * ``Screen`` ("Show Desktop") makes the window transparent or hides it, so
+      the capture shows the desktop -- which is the point of the button. Some
+      installations deliberately put external content there, and forcing black
+      would break that.
+
+    The one case for overriding is an operator who does not want their desktop
+    on air at all. That is opt-in via ``black on show desktop``.
+
+    :param hide_mode: OpenLP's HideMode value, or None when not hidden.
+    :param config: an :class:`OutputConfig`.
+    """
+    if hide_mode is None:
+        return False
+    if hide_mode == HIDE_DESKTOP:
+        return bool(config.black_on_show_desktop)
+    return False

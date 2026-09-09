@@ -22,7 +22,8 @@ Tests for settings mapping.
 """
 import pytest
 
-from decklink.lib.config import DEFAULT_SETTINGS, OutputConfig, Region
+from decklink.lib.config import (DEFAULT_SETTINGS, HIDE_BLANK, HIDE_DESKTOP, HIDE_THEME,
+                                 OutputConfig, Region, should_blank)
 
 
 class FakeSettings:
@@ -49,7 +50,7 @@ def test_defaults_round_trip_into_a_config():
     assert config.sink == 'decklink'
     assert config.backend == 'auto'
     assert config.screen_number == -1
-    assert config.blank_on_hide is True
+    assert config.black_on_show_desktop is False
 
 
 def test_settings_override_the_defaults():
@@ -98,3 +99,48 @@ def test_configs_compare_by_value_so_changes_can_be_detected():
     # equality has to be value-based.
     assert OutputConfig(mode='1080p30') == OutputConfig(mode='1080p30')
     assert OutputConfig(mode='1080p30') != OutputConfig(mode='1080p50')
+
+
+class TestBlankingPolicy:
+    """
+    OpenLP has three hide modes and renders all of them itself, so the capture
+    normally just passes them through. Getting this wrong is user-visible in
+    the worst way: forcing black would break the "Show Desktop" workflow that
+    installations use to put external content on the programme feed.
+    """
+
+    def test_black_button_is_passed_through(self):
+        # HideMode.Blank runs toBlack in the display, so the captured window
+        # is already black. Overriding would be redundant.
+        assert should_blank(HIDE_BLANK, OutputConfig()) is False
+
+    def test_blank_to_theme_is_passed_through(self):
+        assert should_blank(HIDE_THEME, OutputConfig()) is False
+
+    def test_show_desktop_is_passed_through_by_default(self):
+        # This is the requirement: external content shown via Show Desktop
+        # must reach the SDI feed, exactly as it reaches HDMI.
+        assert should_blank(HIDE_DESKTOP, OutputConfig()) is False
+
+    def test_show_desktop_can_be_forced_to_black_opt_in(self):
+        config = OutputConfig(black_on_show_desktop=True)
+        assert should_blank(HIDE_DESKTOP, config) is True
+
+    def test_opt_in_does_not_affect_the_other_modes(self):
+        config = OutputConfig(black_on_show_desktop=True)
+        assert should_blank(HIDE_BLANK, config) is False
+        assert should_blank(HIDE_THEME, config) is False
+
+    def test_not_hidden_is_never_blanked(self):
+        assert should_blank(None, OutputConfig()) is False
+        assert should_blank(None, OutputConfig(black_on_show_desktop=True)) is False
+
+    def test_unknown_hide_mode_passes_through_rather_than_blacking_out(self):
+        # If OpenLP adds a fourth mode, showing something is better than
+        # showing nothing on a live feed.
+        assert should_blank(99, OutputConfig()) is False
+
+    def test_mirrored_hide_mode_values_match_openlp_3_1_7(self):
+        # Documented values from openlp/core/ui/__init__.py; the plugin also
+        # checks these against the real enum at runtime.
+        assert (HIDE_BLANK, HIDE_THEME, HIDE_DESKTOP) == (1, 2, 3)

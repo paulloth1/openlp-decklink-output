@@ -43,9 +43,11 @@ from openlp.core.common.registry import Registry
 from openlp.core.common.settings import Settings
 from openlp.core.lib.plugin import Plugin, StringContent
 from openlp.core.state import State
+from openlp.core.ui import HideMode
 from openlp.core.ui.icons import UiIcons
 
-from .lib.config import DEFAULT_SETTINGS, OutputConfig
+from .lib.config import (DEFAULT_SETTINGS, HIDE_BLANK, HIDE_DESKTOP, HIDE_THEME,
+                         OutputConfig, should_blank)
 from .lib.gst import diagnostics
 from .lib.pipeline import DecklinkPipeline
 from .lib.screens import resolve_region
@@ -77,6 +79,24 @@ class DecklinkPlugin(Plugin):
         self._hooked = False
         State().add_service('decklink', self.weight, is_plugin=True)
         State().update_pre_conditions('decklink', self.check_pre_conditions())
+        self._check_hide_mode_values()
+
+    @staticmethod
+    def _check_hide_mode_values():
+        """
+        Warn if OpenLP's HideMode values no longer match our mirrored copies.
+
+        ``lib.config`` mirrors them so it stays importable without OpenLP, which
+        is what makes the blanking logic unit-testable. If upstream ever
+        renumbers the enum, "Show Desktop" would silently start behaving like
+        "Black", so it is worth checking rather than trusting.
+        """
+        expected = ((HideMode.Blank, HIDE_BLANK), (HideMode.Theme, HIDE_THEME),
+                    (HideMode.Screen, HIDE_DESKTOP))
+        for actual, mirrored in expected:
+            if actual != mirrored:
+                log.warning('OpenLP HideMode values have changed (%s != %s); '
+                            'blanking behaviour may be wrong', actual, mirrored)
 
     def check_pre_conditions(self):
         """
@@ -139,14 +159,19 @@ class DecklinkPlugin(Plugin):
 
     def on_live_display_hide(self, hide_mode=None):
         """
-        Blank the SDI feed when OpenLP hides the display.
+        React to OpenLP hiding the live display.
 
-        This has to be explicit. ``HideMode.Screen`` makes OpenLP's display
-        window transparent rather than black, so a screen capture would put the
-        desktop wallpaper on the programme feed.
+        Usually there is nothing to do. OpenLP renders each hide mode into its
+        own display window and the screen capture picks that up verbatim, so
+        "Black" arrives as black and "Show Desktop" arrives as the desktop --
+        which is the whole point of that button, and something installations
+        rely on to put external content on the programme feed.
         """
-        if self.pipeline is not None and self.pipeline.config.blank_on_hide:
-            self.pipeline.set_blank(True)
+        if self.pipeline is None:
+            return
+        blank = should_blank(hide_mode, self.pipeline.config)
+        log.debug('live_display_hide mode=%s -> force black=%s', hide_mode, blank)
+        self.pipeline.set_blank(blank)
 
     def on_live_display_show(self):
         """

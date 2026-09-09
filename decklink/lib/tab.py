@@ -112,8 +112,8 @@ class DecklinkTab(SettingsTab):
         self.screen_label = QtWidgets.QLabel(self.capture_group_box)
         self.screen_combo_box = QtWidgets.QComboBox(self.capture_group_box)
         capture_layout.addRow(self.screen_label, self.screen_combo_box)
-        self.blank_check_box = QtWidgets.QCheckBox(self.capture_group_box)
-        capture_layout.addRow(self.blank_check_box)
+        self.black_desktop_check_box = QtWidgets.QCheckBox(self.capture_group_box)
+        capture_layout.addRow(self.black_desktop_check_box)
 
         # --- Status ---
         self.status_group_box = QtWidgets.QGroupBox(self)
@@ -147,8 +147,13 @@ class DecklinkTab(SettingsTab):
         self.capture_group_box.setTitle(translate(TAB_CONTEXT, 'Capture'))
         self.backend_label.setText(translate(TAB_CONTEXT, 'Method:'))
         self.screen_label.setText(translate(TAB_CONTEXT, 'Screen:'))
-        self.blank_check_box.setText(
-            translate(TAB_CONTEXT, 'Send black when the display is blanked'))
+        self.black_desktop_check_box.setText(
+            translate(TAB_CONTEXT,
+                      'Send black instead of the desktop when "Show Desktop" is used'))
+        self.black_desktop_check_box.setToolTip(
+            translate(TAB_CONTEXT,
+                      'Leave this off to mirror what the HDMI output does. OpenLP\'s '
+                      '"Black" and "Blank to Theme" buttons are captured as-is either way.'))
         self.status_group_box.setTitle(translate(TAB_CONTEXT, 'Status'))
         self.refresh_button.setText(translate(TAB_CONTEXT, 'Refresh'))
 
@@ -170,7 +175,8 @@ class DecklinkTab(SettingsTab):
         self._select(self.keyer_combo_box, self.settings.value('decklink/keyer mode'))
         self._select(self.backend_combo_box, self.settings.value('decklink/capture backend'))
         self._select(self.screen_combo_box, int(self.settings.value('decklink/screen number')))
-        self.blank_check_box.setChecked(bool(self.settings.value('decklink/blank on hide')))
+        self.black_desktop_check_box.setChecked(
+            bool(self.settings.value('decklink/black on show desktop')))
         self._update_status()
 
     def save(self):
@@ -184,7 +190,8 @@ class DecklinkTab(SettingsTab):
         self.settings.setValue('decklink/keyer mode', self.keyer_combo_box.currentData())
         self.settings.setValue('decklink/capture backend', self.backend_combo_box.currentData())
         self.settings.setValue('decklink/screen number', self.screen_combo_box.currentData())
-        self.settings.setValue('decklink/blank on hide', self.blank_check_box.isChecked())
+        self.settings.setValue('decklink/black on show desktop',
+                               self.black_desktop_check_box.isChecked())
         self.settings_form.register_post_process('decklink_config_updated')
 
     def _reload_screens(self):

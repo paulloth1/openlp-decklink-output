@@ -89,7 +89,9 @@ Note that OpenLP reads `contrib/` from the **OS-default** data directory, so an
 - **Method** — capture backend; leave on *Automatic*.
 - **Screen** — which screen to capture. *Follow the OpenLP display screen* is
   usually right.
-- **Send black when the display is blanked** — leave this on. See below.
+- **Send black instead of the desktop when "Show Desktop" is used** — leave
+  this **off** to mirror what the HDMI output does. See
+  [Hide modes](#hide-modes).
 
 ## How it works
 
@@ -115,11 +117,35 @@ desktop grab. An OpenLP core developer has confirmed there is no internal
 video-output hook: *"The window OpenLP creates is where the display is
 rendered. They cannot be separated."*
 
-**Why the black branch?** OpenLP's `HideMode.Screen` makes the display window
-*transparent*, not black. A naive screen capture would therefore put the
-operator's desktop wallpaper on the programme feed mid-service. The plugin
-listens for `live_display_hide` / `live_display_show` and switches the selector
-to a hard black source, which is deterministic regardless of what OpenLP draws.
+**Why the black branch?** It is a safety net, off by default — see
+[Hide modes](#hide-modes) for when it is worth turning on.
+
+### Hide modes
+
+OpenLP has three ways of hiding the live display, and it renders all three into
+its own display window. A screen capture therefore reproduces each one exactly
+as HDMI does, with no special handling:
+
+| Button | `HideMode` | What OpenLP does | What reaches SDI |
+|---|---|---|---|
+| **Black** | `Blank` | runs `toBlack` in the display | black |
+| **Blank to Theme** | `Theme` | runs `toTheme` | the theme background |
+| **Show Desktop** | `Screen` | goes transparent, or hides the window | **the desktop** |
+
+`Show Desktop` passing the desktop through is deliberate: it is what the button
+is for, and installations use it to put external content — a browser, a video
+player, another application — on the programme feed. Forcing black there would
+break that, so the plugin does not.
+
+If you would rather your desktop never reach air, enable **Send black instead
+of the desktop when "Show Desktop" is used**. It affects only that mode;
+`Black` and `Blank to Theme` are captured as-is either way.
+
+> If `Show Desktop` produces garbage or tearing on the SDI feed rather than a
+> clean desktop, your compositor is probably not compositing the transparent
+> display window well. Turn on OpenLP's
+> **Settings → Advanced → "Disable transparent display"**, which makes OpenLP
+> hide the window outright instead of making it transparent.
 
 ### Capture backends
 
