@@ -218,9 +218,9 @@ Running in production use on:
 | OpenLP | 3.1.0~rc4 from Ubuntu's archive, installed with `--system` |
 | Output | 1080p30 into a DeckLink capture card on a separate switcher PC |
 
-Confirmed on that setup: lyrics slides, fade transitions, **Black**, and
-**Show Desktop** passing external content through cleanly. Video clip playback
-(VLC) is the one display path not yet confirmed on the switcher.
+Confirmed on that setup, all arriving cleanly on the switcher: lyrics slides,
+fade transitions, **video clips** (VLC, smooth playback), **Black**, and
+**Show Desktop** passing external content through.
 
 Still unproven, being explicit because a church A/V machine deserves it:
 
