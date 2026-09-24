@@ -1,240 +1,175 @@
 # OpenLP DeckLink Output
 
-Mirrors OpenLP's live output to a **Blackmagic DeckLink** card as SDI.
+An [OpenLP](https://openlp.org) plugin that mirrors the live output to a
+**Blackmagic DeckLink** card as SDI.
 
-Installs as an OpenLP **community plugin** — a genuine drop-in that needs no fork,
-no patching of an installed OpenLP, and survives OpenLP upgrades.
+Everything the live display shows reaches the SDI feed: lyrics, images,
+themes, transitions, video clips, and the *Black* and *Show Desktop* buttons.
+It is a plugin rather than a fork, so OpenLP itself stays untouched.
 
-Lyrics, images, themes **and video clips** all reach the SDI feed, because the
-plugin captures the display screen rather than asking OpenLP's display widget
-for its pixels. See [How it works](#how-it-works) for why that distinction
-matters more than it sounds.
-
-> **Status: running on real hardware.** Verified in production use on a
-> DeckLink Mini Monitor HD, Ubuntu 24.04, KDE on X11, OpenLP 3.1.0~rc4,
-> Desktop Video 16.4, at 1080p30. The Wayland portal path is still unproven;
-> see [Tested configuration](#tested-configuration).
+**Status:** in production use on a DeckLink Mini Monitor HD, Ubuntu 24.04,
+KDE on X11 and OpenLP 3.1, at 1080p30. See [Tested
+configuration](#tested-configuration).
 
 ## Requirements
 
-| | |
-|---|---|
-| OpenLP | 3.1.x. The drop-in install needs **3.1.0 final or later**; older builds, including Ubuntu 24.04's `3.1.0~rc4`, need `./install.sh --system` |
-| OS | Linux. Developed against Ubuntu / Ubuntu Studio |
-| Session | X11 or Wayland (see [Capture backends](#capture-backends)) |
-| Hardware | Any playback-capable DeckLink device |
-| Driver | Blackmagic **Desktop Video** |
+- **Linux**, with an X11 session (Wayland support exists but is untested; see
+  [Known limitations](#known-limitations)).
+- **OpenLP 3.1.x**.
+- A **playback-capable DeckLink card**. These are PCIe cards; the
+  **DeckLink Mini Monitor HD** is the current entry-level model and the one
+  this plugin is tested on.
+- Blackmagic's **Desktop Video** driver, from
+  [blackmagicdesign.com/support](https://www.blackmagicdesign.com/support)
+  under *Capture and Playback* (free, registration required).
+- GStreamer with the DeckLink plugin. On Debian/Ubuntu:
 
-Packages on Debian/Ubuntu:
+  ```bash
+  sudo apt install python3-gi gstreamer1.0-tools gstreamer1.0-plugins-base \
+                   gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+  ```
 
-```bash
-sudo apt install python3-gi gstreamer1.0-tools \
-                 gstreamer1.0-plugins-base \
-                 gstreamer1.0-plugins-good \
-                 gstreamer1.0-plugins-bad     # provides decklinkvideosink
-# Wayland sessions also need:
-sudo apt install gstreamer1.0-pipewire
-```
-
-`decklinkvideosink` ships in stock Ubuntu's `gstreamer1.0-plugins-bad`
-(universe), so there is no need to build GStreamer or download the Blackmagic
-SDK yourself. The proprietary Desktop Video **driver** is still required at
-runtime, and must be installed separately from Blackmagic.
-
-### Choosing a card
-
-The original **DeckLink Mini Monitor** is discontinued. For a 1080p30 SDI feed
-the current entry-level option is the **DeckLink Mini Monitor HD** (single
-3G-SDI + HDMI out, PCIe single-lane), which is what this plugin is verified
-on. Note these are PCIe cards: a laptop or a
-Mac mini needs a Thunderbolt expansion chassis, or a Thunderbolt-native
-UltraStudio device instead.
-
-Fill+key (alpha) output needs **two** SDI outputs, so no Mini Monitor can do it;
-that requires something like a DeckLink Duo 2. The plugin exposes `keyer-mode`
-for those cards but it is untested.
+  `gstreamer1.0-plugins-bad` provides `decklinkvideosink`. You do not need
+  the Blackmagic SDK.
 
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USER/openlp-decklink-output.git
+git clone https://github.com/paulloth1/openlp-decklink-output.git
 cd openlp-decklink-output
+```
+
+**Ubuntu 24.04** (and any OpenLP older than 3.1.0 final):
+
+```bash
+./install.sh --system
+```
+
+**OpenLP 3.1.0 final or later:**
+
+```bash
 ./install.sh
 ```
 
-On OpenLP 3.1.0 final or later this copies the plugin to:
+Not sure which? Run `./install.sh` — it checks your OpenLP and tells you if
+you need `--system`.
 
-```
-~/.local/share/openlp/contrib/plugins/decklink/
-```
+> **Why two ways?** OpenLP 3.1.0 added support for plugins installed in your
+> home directory (`~/.local/share/openlp/contrib/plugins/`). Ubuntu 24.04
+> ships a pre-release, `3.1.0~rc4`, which looks like 3.1.0 but silently
+> ignores that directory. `--system` installs into OpenLP's own plugin folder
+> instead, using sudo.
 
-**On Ubuntu 24.04, use `./install.sh --system` instead.** Ubuntu 24.04 ships
-OpenLP `3.1.0~rc4`, which reads like 3.1.0 but predates the community-plugin
-loader: it silently ignores `contrib/plugins/`. `--system` installs into
-OpenLP's own plugins directory (e.g.
-`/usr/lib/python3/dist-packages/openlp/plugins/decklink`) with sudo. apt will
-not remove it on upgrade. The installer checks which case applies by asking
-the installed OpenLP directly, and refuses the drop-in route where it would be
-ignored, rather than install somewhere that does nothing.
+Then:
 
-Then restart OpenLP, activate **DeckLink Output** under
-**Settings → Manage Plugins**, and configure it under
-**Settings → Configure OpenLP → DeckLink Output**.
+1. Start OpenLP.
+2. **Settings → Manage Plugins** → set **DeckLink Output** to *Active*.
+3. **Settings → Configure OpenLP → DeckLink Output** → tick **Mirror the live
+   output**, pick your video mode, click OK.
 
-To remove it from either location: `./install.sh --uninstall`
-
-If your OpenLP data directory is somewhere else, pass `--target /path/to/data`.
-Note that OpenLP reads `contrib/` from the **OS-default** data directory, so an
-`advanced/data path` override in OpenLP's settings does *not* move it.
+To uninstall: `./install.sh --uninstall`
 
 ## Configuration
 
-**Settings → DeckLink Output**
+| Setting | What it does |
+|---|---|
+| **Mirror the live output** | Turns SDI output on or off. |
+| **Send to** | *DeckLink hardware* for normal use. *Preview window* shows the output on screen, which is handy for testing without a card. |
+| **Device number** | Which DeckLink device to use. **Detect** lists the ones that respond. |
+| **Video mode** | Output format, e.g. `1080p30` or `1080i50`. Must be something your card supports and your receiving equipment expects. |
+| **Keyer** | Fill+key output. Needs a card with two SDI outputs (not the Mini Monitor). Untested. |
+| **Method** | How the screen is captured. Leave on *Automatic*. |
+| **Screen** | Which screen to capture. *Follow the OpenLP display screen* is almost always right. |
+| **Send black instead of the desktop when "Show Desktop" is used** | Leave **off** to match what your projector/HDMI output shows. Turn on if you never want your desktop on air. |
 
-- **Mirror the live output** — the master on/off switch.
-- **Send to** — `DeckLink hardware`, or `Preview window` to test the whole
-  pipeline with no card installed, or `Discard` to measure cost only.
-- **Device number** / **Detect** — which DeckLink device. *Detect* probes each
-  device number and reports which respond.
-- **Video mode** — the standard SD, 720p, 1080i/p and 2160p broadcast modes
-  that the installed sink supports. Pick `1080p30`, not `1080p2997`, unless
-  you specifically want 29.97. The list cannot know what *your card* can
-  output: an HD card such as the Mini Monitor HD will refuse the 2160p modes,
-  and the plugin reports that as an error rather than starting.
-- **Method** — capture backend; leave on *Automatic*.
-- **Screen** — which screen to capture. *Follow the OpenLP display screen* is
-  usually right.
-- **Send black instead of the desktop when "Show Desktop" is used** — leave
-  this **off** to mirror what the HDMI output does. See
-  [Hide modes](#hide-modes).
+### Black, Blank to Theme and Show Desktop
+
+The SDI feed follows these buttons exactly like HDMI does:
+
+| Button | SDI shows |
+|---|---|
+| **Black** | black |
+| **Blank to Theme** | the theme background |
+| **Show Desktop** | the desktop, including anything you have opened there (a browser, a video player, another app) |
+
+## Troubleshooting
+
+`tools/smoketest.py` tests each part on its own, without OpenLP:
+
+```bash
+python3 tools/smoketest.py check        # what is installed and what is missing
+python3 tools/smoketest.py devices      # does the card respond?
+python3 tools/smoketest.py bars --sink decklink --seconds 30   # colour bars to SDI
+```
+
+**No signal at all.** Send colour bars (above). If bars don't arrive either,
+the problem is the card, driver or cable, not OpenLP. Check the driver is
+loaded with `ls /dev/blackmagic/`; you should see `io0`.
+
+**SDI stopped working after a system update.** The Desktop Video driver has
+to be rebuilt for each new Linux kernel. That usually happens automatically,
+but not always. Check `ls /dev/blackmagic/` after kernel updates, and reinstall
+Desktop Video if `io0` is missing.
+
+**The plugin isn't in Settings → Manage Plugins.** You probably installed
+without `--system` on an OpenLP that needs it. Run `./install.sh` to check.
+
+**Output won't start after changing the video mode.** Your card doesn't
+support that mode. The HD cards, for example, can't do `2160p`.
+
+**Show Desktop looks torn or garbled on SDI.** In OpenLP, turn on **Settings →
+Advanced → Disable display transparency**.
+
+**The live display screen is unplugged.** The plugin captures what OpenLP
+draws on its display screen, so that screen has to exist. If SDI must keep
+working without a projector attached, use an HDMI dummy plug (about €10) in
+the display output.
 
 ## How it works
 
+The plugin captures the part of the screen where OpenLP's live display is
+shown, and sends it to the card through GStreamer:
+
 ```
-<capture> ! queue ! videorate ! videoscale ! videoconvert ! caps ─┐
-                                                                  ├─ input-selector ! decklinkvideosink
-videotestsrc pattern=black ! videoconvert ! caps ─────────────────┘
-```
-
-**No video frame passes through Python.** Capture, colour conversion and the
-sink are all GStreamer C code, clocked by the DeckLink card's own hardware
-clock. A Python timer pushing 1080p30 buffers would drop frames whenever OpenLP
-did something expensive on the GUI thread; this design cannot.
-
-**Why capture the screen rather than the display window?** OpenLP renders
-lyrics into a `QWebEngineView` inside its display window, but plays video by
-handing VLC the native window id of a *separate top-level window* —
-`vlcplayer.py` gives the live video frame `Qt.Tool` flags, which promotes it out
-of the display window. The two end up as siblings on the same rectangle. So any
-window-targeted capture, and `QWidget.grab()`, would show lyrics and a black
-hole where video should be. OpenLP's own code concedes this and falls back to a
-desktop grab. An OpenLP core developer has confirmed there is no internal
-video-output hook: *"The window OpenLP creates is where the display is
-rendered. They cannot be separated."*
-
-**Why the black branch?** It is a safety net, off by default — see
-[Hide modes](#hide-modes) for when it is worth turning on.
-
-### Hide modes
-
-OpenLP has three ways of hiding the live display, and it renders all three into
-its own display window. A screen capture therefore reproduces each one exactly
-as HDMI does, with no special handling:
-
-| Button | `HideMode` | What OpenLP does | What reaches SDI |
-|---|---|---|---|
-| **Black** | `Blank` | runs `toBlack` in the display | black |
-| **Blank to Theme** | `Theme` | runs `toTheme` | the theme background |
-| **Show Desktop** | `Screen` | goes transparent, or hides the window | **the desktop** |
-
-`Show Desktop` passing the desktop through is deliberate: it is what the button
-is for, and installations use it to put external content — a browser, a video
-player, another application — on the programme feed. Forcing black there would
-break that, so the plugin does not.
-
-If you would rather your desktop never reach air, enable **Send black instead
-of the desktop when "Show Desktop" is used**. It affects only that mode;
-`Black` and `Blank to Theme` are captured as-is either way.
-
-> If `Show Desktop` produces garbage or tearing on the SDI feed rather than a
-> clean desktop, your compositor is probably not compositing the transparent
-> display window well. Turn on OpenLP's
-> **Settings → Advanced → "Disable transparent display"**, which makes OpenLP
-> hide the window outright instead of making it transparent.
-
-### Capture backends
-
-| Backend | Session | Notes |
-|---|---|---|
-| `ximagesrc` | X11 | Simple, permissionless, well-trodden. `use-damage=false` forces full frames — damage-based capture emits nothing while a slide is static, which starves a hardware output. |
-| `pipewiresrc` | Wayland | Negotiates an `xdg-desktop-portal` ScreenCast session over D-Bus. Stores a `restore_token` so the operator is not prompted on every start. |
-| `videotestsrc` | any | Colour bars. Lets you prove the output path with no capture and no card. |
-
-*Automatic* picks by session type and falls back to the test pattern, so the
-plugin always starts and always has something to report rather than failing
-silently.
-
-## Diagnostics
-
-`tools/smoketest.py` runs standalone, without OpenLP:
-
-```bash
-python3 tools/smoketest.py check       # what is installed, what is missing
-python3 tools/smoketest.py modes       # video modes the sink accepts
-python3 tools/smoketest.py devices     # which device numbers respond
-python3 tools/smoketest.py bars --sink decklink --device 0 --seconds 10
-python3 tools/smoketest.py mirror --region 0,0,1920,1080 --sink preview
-python3 tools/smoketest.py snapshot --region 0,0,1920,1080 --out /tmp/frame.png
+screen capture ─► convert to 1080p30 UYVY ─┐
+                                            ├─► selector ─► decklinkvideosink
+black frame ───────────────────────────────┘
 ```
 
-**Run `snapshot` while a video is playing on OpenLP's live output.** If the PNG
-shows the video, screen capture is a valid frame source on your machine. If the
-video area is black, the capture is not seeing VLC's window and this approach
-needs revisiting — try setting a different VLC output module via OpenLP's
-`media/vlc arguments` setting, or give OpenLP a dedicated screen.
+A few design decisions are worth knowing about:
 
-## Keeping SDI alive when HDMI is unplugged
-
-A capture backend needs a screen that actually exists. If the display output is
-physically disconnected there is nothing to capture. Two options:
-
-1. **HDMI EDID dummy plug** (~€10). Works at the DRM level, identically on X11
-   and Wayland, and cannot be broken by a compositor update. This is the
-   recommended route.
-2. **A virtual output.** On Xorg, `xf86-video-dummy` gives a headless
-   1920×1080 screen. Under Wayland/KWin this is considerably less well-trodden;
-   the dummy plug is the more reliable answer.
+- **It captures the screen, not OpenLP's window.** OpenLP plays video through
+  VLC in a separate window on top of its display window. Capturing only
+  OpenLP's window would show the lyrics but a black hole where video should
+  be. Capturing the screen area gets everything.
+- **No video passes through Python.** Capture, conversion and output all run
+  inside GStreamer, timed by the DeckLink card's own clock. Busy moments in
+  OpenLP can't cause dropped frames.
+- **Failures stay contained.** If the SDI output fails, the error is written
+  to OpenLP's log and OpenLP keeps running. The settings tab shows missing
+  dependencies, such as the driver or GStreamer plugin.
 
 ## Tested configuration
 
-Running in production use on:
-
 | | |
 |---|---|
-| Card | DeckLink Mini Monitor HD, firmware reported OK |
-| Driver | Blackmagic Desktop Video 16.4 (DKMS, Secure Boot off) |
-| OS | Ubuntu 24.04.4, kernel 6.8.0 |
-| Desktop | KDE Plasma on X11 (`ximagesrc` capture) |
-| OpenLP | 3.1.0~rc4 from Ubuntu's archive, installed with `--system` |
-| Output | 1080p30 into a DeckLink capture card on a separate switcher PC |
+| Card | DeckLink Mini Monitor HD |
+| Driver | Desktop Video 16.4 |
+| OS | Ubuntu 24.04, kernel 6.8, KDE Plasma on X11 |
+| OpenLP | 3.1.0~rc4 (Ubuntu package), installed with `--system` |
+| Output | 1080p30 into a DeckLink capture card in a separate PC |
 
-Confirmed on that setup, all arriving cleanly on the switcher: lyrics slides,
-fade transitions, **video clips** (VLC, smooth playback), **Black**, and
-**Show Desktop** passing external content through.
+Confirmed working: lyrics, fade transitions, video clips, Black and Show
+Desktop.
 
-Still unproven, being explicit because a church A/V machine deserves it:
+## Known limitations
 
-- **The Wayland portal path (`lib/portal.py`) has never been executed.** The
-  tested machine runs X11. Treat Wayland as needing on-device testing.
-- **The Desktop Video driver is the weakest link, and not something this plugin
-  can fix.** It ships as DKMS modules wrapping a proprietary blob, with a
-  history of breaking across Ubuntu kernel bumps. After a kernel update, check
-  `ls /dev/blackmagic/` before a service.
-- Embedded SDI **audio** is not implemented. Audio stays on your existing path.
-- Fill+key is exposed but untested.
-- OpenLP 4.0 (currently alpha) replaces VLC with `QMediaPlayer` and PyQt5 with
-  PySide6. `lib/compat.py` handles the binding; the capture approach still
-  applies, but this is untested against 4.0.
+- **Wayland is untested.** The plugin includes a Wayland capture method, but it
+  has never been run on real hardware. Use an X11 session.
+- **No audio over SDI.** Only video is sent; keep audio on your existing
+  connection.
+- **Fill+key is untested.**
+- **OpenLP 4.0** (in alpha) is untested.
 
 ## Development
 
@@ -244,16 +179,14 @@ pip install pytest
 python -m pytest tests/ -q
 ```
 
-The tests deliberately cover the parts that can be verified without a desktop
-session or hardware: launch-string construction, settings mapping, region
-arithmetic and backend selection. `lib/launch.py` is kept free of Qt, D-Bus and
-GStreamer imports for exactly this reason.
+The tests cover the logic that can be checked without a desktop or a card:
+pipeline construction, video modes, settings, screen regions and capture
+method selection.
 
 ## Licence
 
-GPL-3.0-or-later, matching OpenLP. See [LICENSE](LICENSE).
+GPL-3.0-or-later, the same as OpenLP. See [LICENSE](LICENSE).
 
-This plugin talks to DeckLink hardware through GStreamer's `decklinkvideosink`,
-which Ubuntu already distributes. It does not link, vendor or redistribute the
-Blackmagic SDK. That distinction matters: an NDI output plugin was proposed for
-OpenLP and rejected on GPL/SDK licence-incompatibility grounds.
+The plugin talks to the card through GStreamer's `decklinkvideosink`, which
+Linux distributions already ship. It does not include or redistribute any
+Blackmagic SDK code.
