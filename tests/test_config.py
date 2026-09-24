@@ -144,3 +144,10 @@ class TestBlankingPolicy:
         # Documented values from openlp/core/ui/__init__.py; the plugin also
         # checks these against the real enum at runtime.
         assert (HIDE_BLANK, HIDE_THEME, HIDE_DESKTOP) == (1, 2, 3)
+
+
+def test_mode_list_falls_back_to_the_known_modes_without_gstreamer(monkeypatch):
+    from decklink.lib import devices
+    from decklink.lib.config import MODES
+    monkeypatch.setattr(devices, 'load_gst', lambda: (None, None))
+    assert devices.list_modes() == list(MODES)

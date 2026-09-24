@@ -171,7 +171,13 @@ class DecklinkTab(SettingsTab):
         self.enabled_check_box.setChecked(bool(self.settings.value('decklink/enabled')))
         self._select(self.sink_combo_box, self.settings.value('decklink/sink'))
         self.device_spin_box.setValue(int(self.settings.value('decklink/device number')))
-        self._select(self.mode_combo_box, self.settings.value('decklink/mode'))
+        mode = self.settings.value('decklink/mode')
+        if self.mode_combo_box.findData(mode) < 0:
+            # Never let a missing entry silently fall through to index 0: that
+            # would quietly rewrite the saved mode the next time OK is pressed.
+            self.mode_combo_box.addItem(
+                translate(TAB_CONTEXT, '{mode} (not supported)').format(mode=mode), mode)
+        self._select(self.mode_combo_box, mode)
         self._select(self.keyer_combo_box, self.settings.value('decklink/keyer mode'))
         self._select(self.backend_combo_box, self.settings.value('decklink/capture backend'))
         self._select(self.screen_combo_box, int(self.settings.value('decklink/screen number')))

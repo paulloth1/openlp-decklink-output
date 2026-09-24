@@ -10,16 +10,16 @@ plugin captures the display screen rather than asking OpenLP's display widget
 for its pixels. See [How it works](#how-it-works) for why that distinction
 matters more than it sounds.
 
-> **Status: unverified against hardware.** The plugin is complete and its
-> logic is unit-tested, but it has not yet been run against a real DeckLink
-> card or a live Wayland portal. See [What is not yet
-> proven](#what-is-not-yet-proven) before trusting it in a service.
+> **Status: running on real hardware.** Verified in production use on a
+> DeckLink Mini Monitor HD, Ubuntu 24.04, KDE on X11, OpenLP 3.1.0~rc4,
+> Desktop Video 16.4, at 1080p30. The Wayland portal path is still unproven;
+> see [Tested configuration](#tested-configuration).
 
 ## Requirements
 
 | | |
 |---|---|
-| OpenLP | **3.1.0 or later** (the community plugin mechanism was added in 3.1.0) |
+| OpenLP | 3.1.x. The drop-in install needs **3.1.0 final or later**; older builds, including Ubuntu 24.04's `3.1.0~rc4`, need `./install.sh --system` |
 | OS | Linux. Developed against Ubuntu / Ubuntu Studio |
 | Session | X11 or Wayland (see [Capture backends](#capture-backends)) |
 | Hardware | Any playback-capable DeckLink device |
@@ -45,7 +45,8 @@ runtime, and must be installed separately from Blackmagic.
 
 The original **DeckLink Mini Monitor** is discontinued. For a 1080p30 SDI feed
 the current entry-level option is the **DeckLink Mini Monitor HD** (single
-3G-SDI + HDMI out, PCIe single-lane). Note these are PCIe cards: a laptop or a
+3G-SDI + HDMI out, PCIe single-lane), which is what this plugin is verified
+on. Note these are PCIe cards: a laptop or a
 Mac mini needs a Thunderbolt expansion chassis, or a Thunderbolt-native
 UltraStudio device instead.
 
@@ -61,15 +62,26 @@ cd openlp-decklink-output
 ./install.sh
 ```
 
-This copies the plugin to:
+On OpenLP 3.1.0 final or later this copies the plugin to:
 
 ```
 ~/.local/share/openlp/contrib/plugins/decklink/
 ```
 
-Then restart OpenLP and open **Settings → DeckLink Output**.
+**On Ubuntu 24.04, use `./install.sh --system` instead.** Ubuntu 24.04 ships
+OpenLP `3.1.0~rc4`, which reads like 3.1.0 but predates the community-plugin
+loader: it silently ignores `contrib/plugins/`. `--system` installs into
+OpenLP's own plugins directory (e.g.
+`/usr/lib/python3/dist-packages/openlp/plugins/decklink`) with sudo. apt will
+not remove it on upgrade. The installer checks which case applies by asking
+the installed OpenLP directly, and refuses the drop-in route where it would be
+ignored, rather than install somewhere that does nothing.
 
-To remove it: `./install.sh --uninstall`
+Then restart OpenLP, activate **DeckLink Output** under
+**Settings → Manage Plugins**, and configure it under
+**Settings → Configure OpenLP → DeckLink Output**.
+
+To remove it from either location: `./install.sh --uninstall`
 
 If your OpenLP data directory is somewhere else, pass `--target /path/to/data`.
 Note that OpenLP reads `contrib/` from the **OS-default** data directory, so an
@@ -84,8 +96,11 @@ Note that OpenLP reads `contrib/` from the **OS-default** data directory, so an
   pipeline with no card installed, or `Discard` to measure cost only.
 - **Device number** / **Detect** — which DeckLink device. *Detect* probes each
   device number and reports which respond.
-- **Video mode** — read from the installed sink where possible. Pick `1080p30`,
-  not `1080p2997`, unless you specifically want 29.97.
+- **Video mode** — the standard SD, 720p, 1080i/p and 2160p broadcast modes
+  that the installed sink supports. Pick `1080p30`, not `1080p2997`, unless
+  you specifically want 29.97. The list cannot know what *your card* can
+  output: an HD card such as the Mini Monitor HD will refuse the 2160p modes,
+  and the plugin reports that as an error rather than starting.
 - **Method** — capture backend; leave on *Automatic*.
 - **Screen** — which screen to capture. *Follow the OpenLP display screen* is
   usually right.
@@ -190,22 +205,27 @@ physically disconnected there is nothing to capture. Two options:
    1920×1080 screen. Under Wayland/KWin this is considerably less well-trodden;
    the dummy plug is the more reliable answer.
 
-## What is not yet proven
+## Tested configuration
 
-Being explicit, because a church A/V machine deserves it:
+Running in production use on:
 
-- **Never run against real DeckLink hardware.** No card was available during
-  development. The sink configuration follows the documented properties but is
-  unverified.
-- **The Wayland portal path (`lib/portal.py`) has never been executed.** It has
-  no test coverage that touches a live D-Bus. Treat X11 as the proven-by-design
-  path and the portal as needing on-device testing.
-- **Whether a screen capture includes VLC's video window is unverified** on any
-  particular machine. This is what `smoketest.py snapshot` exists to answer.
+| | |
+|---|---|
+| Card | DeckLink Mini Monitor HD, firmware reported OK |
+| Driver | Blackmagic Desktop Video 16.4 (DKMS, Secure Boot off) |
+| OS | Ubuntu 24.04.4, kernel 6.8.0 |
+| Desktop | KDE Plasma on X11 (`ximagesrc` capture) |
+| OpenLP | 3.1.0~rc4 from Ubuntu's archive, installed with `--system` |
+| Output | 1080p30 into a DeckLink capture card on a separate switcher PC |
+
+Still unproven, being explicit because a church A/V machine deserves it:
+
+- **The Wayland portal path (`lib/portal.py`) has never been executed.** The
+  tested machine runs X11. Treat Wayland as needing on-device testing.
 - **The Desktop Video driver is the weakest link, and not something this plugin
   can fix.** It ships as DKMS modules wrapping a proprietary blob, with a
-  history of breaking across Ubuntu kernel bumps. A kernel update can silently
-  kill SDI output.
+  history of breaking across Ubuntu kernel bumps. After a kernel update, check
+  `ls /dev/blackmagic/` before a service.
 - Embedded SDI **audio** is not implemented. Audio stays on your existing path.
 - Fill+key is exposed but untested.
 - OpenLP 4.0 (currently alpha) replaces VLC with `QMediaPlayer` and PyQt5 with

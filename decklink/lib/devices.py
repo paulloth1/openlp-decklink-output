@@ -26,7 +26,7 @@ probing device numbers until one refuses to reach READY.
 """
 import logging
 
-from .config import FALLBACK_MODES
+from .config import FALLBACK_MODES, MODES
 from .gst import element_available, load_gst
 
 
@@ -39,10 +39,14 @@ MAX_DEVICES = 8
 
 def list_modes():
     """
-    Return the video mode nicknames the installed sink accepts.
+    Return the video modes worth offering: the sink's modes that the plugin
+    also knows how to build caps for.
 
-    Falls back to a known-good list when the element cannot be introspected,
-    so the settings tab is still usable before the driver is installed.
+    The sink's enum is every mode GStreamer knows about -- 67 of them,
+    including DCI and 8K -- not what the installed card can output, so it is
+    narrowed to :data:`~.config.MODES`. Falls back to that list when the
+    element cannot be introspected, so the settings tab still works before the
+    driver is installed.
     """
     gst, _ = load_gst()
     if gst is None or not element_available('decklinkvideosink'):
@@ -54,7 +58,8 @@ def list_modes():
         pspec = sink.find_property('mode')
         modes = [value.value_nick for value in type(pspec.default_value).__enum_values__.values()]
         # 'auto' is offered by the element but is not a real output mode.
-        modes = [mode for mode in modes if mode and mode != 'auto']
+        offered = set(modes)
+        modes = [mode for mode in MODES if mode in offered]
         if modes:
             return modes
     except Exception as error:  # noqa: BLE001 - introspection differs by version

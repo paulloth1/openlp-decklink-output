@@ -22,7 +22,7 @@ Tests for the pipeline launch-string builders.
 """
 import pytest
 
-from decklink.lib.config import OutputConfig, Region
+from decklink.lib.config import MODES, OutputConfig, Region, UnknownModeError
 from decklink.lib.launch import PipelineError, build_caps, build_launch, build_sink_fragment
 
 
@@ -45,10 +45,43 @@ def test_caps_for_fractional_mode_keep_the_1001_denominator():
     assert 'framerate=60000/1001' in build_caps(OutputConfig(mode='1080p5994'))
 
 
-def test_unknown_mode_falls_back_to_1080p30_rather_than_crashing():
-    caps = build_caps(OutputConfig(mode='not-a-mode'))
-    assert 'width=1920,height=1080' in caps
-    assert 'framerate=30/1' in caps
+def test_unknown_mode_is_an_error_not_a_silent_1080p30():
+    # This used to fall back to 1080p30 caps, which built pipelines whose caps
+    # contradicted their own mode and refused to start.
+    with pytest.raises(UnknownModeError):
+        build_caps(OutputConfig(mode='8kp60'))
+
+
+def test_1080p2997_gets_its_own_frame_rate():
+    # The concrete case of the old bug: the dropdown offered 1080p2997 but the
+    # caps said 30/1.
+    assert 'framerate=30000/1001' in build_caps(OutputConfig(mode='1080p2997'))
+
+
+def test_1080p2398_gets_its_own_frame_rate():
+    assert 'framerate=24000/1001' in build_caps(OutputConfig(mode='1080p2398'))
+
+
+@pytest.mark.parametrize('mode, size', [('pal', 'width=720,height=576'),
+                                        ('ntsc', 'width=720,height=486')])
+def test_sd_modes_are_sd_sized_and_interlaced(mode, size):
+    caps = build_caps(OutputConfig(mode=mode))
+    assert size in caps
+    assert 'interlace-mode=interleaved' in caps
+
+
+def test_2160p_modes_are_uhd_sized():
+    assert 'width=3840,height=2160' in build_caps(OutputConfig(mode='2160p30'))
+
+
+@pytest.mark.parametrize('mode', list(MODES))
+def test_every_offered_mode_builds_caps(mode):
+    # Anything in MODES can end up in the dropdown, so every one of them must
+    # produce caps whose frame rate matches the mode's own definition.
+    width, height, num, den, _ = MODES[mode]
+    caps = build_caps(OutputConfig(mode=mode))
+    assert 'width={},height={}'.format(width, height) in caps
+    assert 'framerate={}/{}'.format(num, den) in caps
 
 
 def test_decklink_sink_carries_device_and_mode():

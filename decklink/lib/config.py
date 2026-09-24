@@ -49,30 +49,46 @@ SINK_NONE = 'none'
 
 SINKS = (SINK_DECKLINK, SINK_PREVIEW, SINK_NONE)
 
-#: Fallback mode list, used when the installed decklinkvideosink cannot be
-#: introspected (no Desktop Video driver, or plugin not installed yet).
-FALLBACK_MODES = (
-    '720p50', '720p5994', '720p60',
-    '1080p24', '1080p25', '1080p30',
-    '1080i50', '1080i5994', '1080i60',
-    '1080p50', '1080p5994', '1080p60',
-)
-
-#: Frame rate implied by each mode, for the pipeline's framerate caps.
-MODE_FRAMERATES = {
-    '720p50': (50, 1), '720p5994': (60000, 1001), '720p60': (60, 1),
-    '1080p24': (24, 1), '1080p25': (25, 1), '1080p30': (30, 1),
-    '1080i50': (25, 1), '1080i5994': (30000, 1001), '1080i60': (30, 1),
-    '1080p50': (50, 1), '1080p5994': (60000, 1001), '1080p60': (60, 1),
+#: Every mode the plugin can build correct caps for:
+#: name -> (width, height, fps numerator, fps denominator, interlaced).
+#:
+#: This is deliberately the single source of truth. The sink's ``mode`` enum
+#: lists 67 modes, including DCI, 8K and anamorphic SD that no entry-level card
+#: can output, and a mode missing from here used to fall back silently to
+#: 1080p30 caps -- so ``1080p2997`` built a pipeline whose caps contradicted its
+#: own mode and refused to start. Only modes defined here are offered, and
+#: anything else is an error rather than a wrong guess.
+#:
+#: Interlaced frame rates are frames, not fields: 1080i50 is 25 frames/s.
+MODES = {
+    'ntsc': (720, 486, 30000, 1001, True),
+    'pal': (720, 576, 25, 1, True),
+    '720p50': (1280, 720, 50, 1, False),
+    '720p5994': (1280, 720, 60000, 1001, False),
+    '720p60': (1280, 720, 60, 1, False),
+    '1080i50': (1920, 1080, 25, 1, True),
+    '1080i5994': (1920, 1080, 30000, 1001, True),
+    '1080i60': (1920, 1080, 30, 1, True),
+    '1080p2398': (1920, 1080, 24000, 1001, False),
+    '1080p24': (1920, 1080, 24, 1, False),
+    '1080p25': (1920, 1080, 25, 1, False),
+    '1080p2997': (1920, 1080, 30000, 1001, False),
+    '1080p30': (1920, 1080, 30, 1, False),
+    '1080p50': (1920, 1080, 50, 1, False),
+    '1080p5994': (1920, 1080, 60000, 1001, False),
+    '1080p60': (1920, 1080, 60, 1, False),
+    '2160p2398': (3840, 2160, 24000, 1001, False),
+    '2160p24': (3840, 2160, 24, 1, False),
+    '2160p25': (3840, 2160, 25, 1, False),
+    '2160p2997': (3840, 2160, 30000, 1001, False),
+    '2160p30': (3840, 2160, 30, 1, False),
+    '2160p50': (3840, 2160, 50, 1, False),
+    '2160p5994': (3840, 2160, 60000, 1001, False),
+    '2160p60': (3840, 2160, 60, 1, False),
 }
 
-#: Frame size implied by each mode.
-MODE_SIZES = {
-    '720p50': (1280, 720), '720p5994': (1280, 720), '720p60': (1280, 720),
-    '1080p24': (1920, 1080), '1080p25': (1920, 1080), '1080p30': (1920, 1080),
-    '1080i50': (1920, 1080), '1080i5994': (1920, 1080), '1080i60': (1920, 1080),
-    '1080p50': (1920, 1080), '1080p5994': (1920, 1080), '1080p60': (1920, 1080),
-}
+#: Offered when the installed sink cannot be introspected.
+FALLBACK_MODES = tuple(MODES)
 
 #: OpenLP's HideMode values, mirrored so this module stays importable without
 #: OpenLP present. Verified against openlp/core/ui/__init__.py in 3.1.7;
@@ -92,6 +108,17 @@ DEFAULT_SETTINGS = {
     'decklink/portal restore token': '',
     'decklink/keyer mode': 'off',
 }
+
+
+class UnknownModeError(ValueError):
+    """
+    Raised for a video mode the plugin has no caps definition for.
+    """
+
+    def __init__(self, mode):
+        super().__init__('Unsupported video mode {!r}. Supported modes: {}'
+                         .format(mode, ', '.join(MODES)))
+        self.mode = mode
 
 
 @dataclass(frozen=True)
@@ -139,25 +166,38 @@ class OutputConfig:
     portal_restore_token: str = ''
 
     @property
+    def _mode_spec(self):
+        try:
+            return MODES[self.mode]
+        except KeyError:
+            raise UnknownModeError(self.mode) from None
+
+    @property
     def framerate(self):
         """
         The (numerator, denominator) frame rate for the configured mode.
+
+        :raises UnknownModeError: for a mode not in :data:`MODES`.
         """
-        return MODE_FRAMERATES.get(self.mode, (30, 1))
+        return self._mode_spec[2], self._mode_spec[3]
 
     @property
     def size(self):
         """
         The (width, height) frame size for the configured mode.
+
+        :raises UnknownModeError: for a mode not in :data:`MODES`.
         """
-        return MODE_SIZES.get(self.mode, (1920, 1080))
+        return self._mode_spec[0], self._mode_spec[1]
 
     @property
     def is_interlaced(self):
         """
-        True for the ``1080i*`` modes. No mode name contains 'i' otherwise.
+        True for interlaced modes, including NTSC and PAL.
+
+        :raises UnknownModeError: for a mode not in :data:`MODES`.
         """
-        return 'i' in self.mode
+        return self._mode_spec[4]
 
     def with_region(self, region):
         return replace(self, region=region)
